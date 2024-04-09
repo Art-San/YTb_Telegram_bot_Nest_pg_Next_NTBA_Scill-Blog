@@ -14,7 +14,6 @@ export class BotService implements OnModuleInit {
 		const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
 			polling: true,
 		})
-
 		const thanksWords = [
 			'спасибо',
 			'спс',
@@ -24,59 +23,57 @@ export class BotService implements OnModuleInit {
 			'👍',
 		]
 
-		bot.on('new_chat_members', (ctx) => {
-			// console.log(0, 'new_chat_members', ctx)
+		bot.on('new_chat_members', (ctx) =>
 			bot.sendMessage(
 				ctx.chat.id,
 				`Привет, ${ctx.new_chat_members[0].first_name}! Добро пожаловать в чат Skill Blog! Я Skill Blog: Bot! Если тебе нужна помощь, то задай свой вопрос и участники группы постараются тебе помочь! Помощник чата yaluvv (@yalvv). Админ чата ꧁Seeh Ball꧂ (@dvejer)`
 			)
-		})
+		)
 
 		bot.on(
 			'left_chat_member',
-			async (msg) =>
-				await this.removeReputation(String(msg.left_chat_member.id))
+			async (ctx) =>
+				await this.removeReputation(String(ctx.left_chat_member.id))
 		)
 
-		bot.on('message', (ctx) => {
-			// console.log(0, 'ctx.text', ctx.text)
-			const text = ctx.text
-			const telegramId = String(ctx.from.id)
-			// console.log(0, ctx)
-			// console.log(1, text, telegramId)
-			// console.log(1, 'ctx.sticker', ctx.sticker)
-			// console.log(2, 'ctx.sticker.emoji', ctx?.sticker?.emoji)
-
+		bot.on('message', async (ctx) => {
 			if (ctx?.reply_to_message) {
-				if (ctx.text === '👍' || (ctx.sticker && ctx.sticker.emoji === '👍')) {
+				const user = await bot.getChatMember(
+					ctx.chat.id,
+					ctx.reply_to_message.from.id
+				)
+
+				if (user.status === 'left') {
+					return
+				}
+
+				if (ctx?.sticker) {
+					if (ctx.sticker.emoji === '👍') {
+						this.handleThanksWordReaction(ctx, bot)
+					}
+					return
+				}
+
+				if (
+					ctx.reply_to_message.from.username === 'skill_blog_bot' ||
+					ctx.reply_to_message.from.username === ctx.from.username
+				) {
+					return
+				}
+
+				const thanksWord = ctx.text
+					.toLowerCase()
+					.split(' ')
+					.find((word) =>
+						thanksWords.includes(
+							word.replace(/[&\/\\#,+()$~%.'":*?!<>{}]/g, '')
+						)
+					)
+
+				if (thanksWord) {
 					this.handleThanksWordReaction(ctx, bot)
 				}
 			}
-
-			// if (ctx?.sticker) {
-			// 	if (ctx.sticker.emoji === '👍' || '👌') {
-			// 		this.handleThanksWordReaction(ctx, bot)
-			// 	}
-			// 	return
-			// }
-
-			// if (
-			// 	ctx.reply_to_message.from.username === 'NextBot_for_test_bot' ||
-			// 	ctx.reply_to_message.from.username === ctx.from.username
-			// ) {
-			// 	return
-			// }
-
-			// const thanksWord = ctx.text
-			// 	.toLowerCase()
-			// 	.split(' ')
-			// 	.find((word) =>
-			// 		thanksWords.includes(word.replace(/[&\/\\#,+()$~%.'":*?!<>{}]/g, ''))
-			// 	)
-
-			// if (thanksWord) {
-			// 	this.handleThanksWordReaction(ctx, bot)
-			// }
 		})
 	}
 
@@ -166,29 +163,6 @@ export class BotService implements OnModuleInit {
 			bot
 		)
 
-		// const reputationsData = await this.getReputation(telegramId)
-
-		// if (reputationsData) {
-		// 	await this.updateReputation(
-		// 		reputationsData.reputation + 1,
-		// 		reputationsData.id
-		// 	)
-		// 	return
-		// }
-
-		// await this.addNewReputation({
-		// 	telegramId,
-		// 	username: ctx.reply_to_message.from?.username
-		// 		? ctx.reply_to_message.from.username
-		// 		: '',
-		// 	userAvatar,
-		// 	fullName: `${ctx.reply_to_message.from?.first_name} ${ctx.reply_to_message.from?.last_name}`,
-		// })
-
-		// console.log(0, telegramId)
-		// console.log(0, userAvatar)
-		// console.log(1, ctx)
-		// console.log(1, ctx?.reply_to_message?.from.id)
 		await this.increaseReputation(
 			telegramId,
 			ctx.reply_to_message.from?.username
