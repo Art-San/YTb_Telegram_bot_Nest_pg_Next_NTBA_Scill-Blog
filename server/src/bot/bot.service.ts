@@ -1,5 +1,5 @@
 import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common'
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient, Reputations } from '@prisma/client'
 import { DbService } from 'src/db/db.service'
 import TelegramBot = require('node-telegram-bot-api')
 
@@ -25,49 +25,125 @@ export class BotService implements OnModuleInit {
 		})
 
 		bot.on('message', (ctx) => {
-			console.log(0, ctx.text)
+			console.log(0, 'ctx.text', ctx.text)
 			const text = ctx.text
 			const telegramId = String(ctx.from.id)
 			// console.log(0, ctx)
 			// console.log(1, text, telegramId)
-			// console.log(2, text, telegramId)
+			// console.log(1, 'ctx.sticker', ctx.sticker)
+			// console.log(2, 'ctx.sticker.emoji', ctx.sticker.emoji)
 
-			if (ctx?.reply_to_message) {
-				if (ctx.text === '👍' || (ctx.sticker && ctx.sticker.emoji === '👍')) {
+			if (ctx.text === '👍') {
+				this.handleThanksWordReaction(ctx, bot)
+				return
+			}
+
+			if (ctx?.sticker) {
+				if (ctx.sticker.emoji === '👍' || '👌') {
 					this.handleThanksWordReaction(ctx, bot)
 				}
+				// return
 			}
 		})
 	}
 
+	async sendReputationMessage(
+		chatId: number,
+		replyUsername: string,
+		fromUsername: string,
+		bot: TelegramBot,
+		telegramId: string
+	) {
+		const reputationData = await this.getReputation(telegramId)
+
+		bot.sendMessage(
+			chatId,
+			`Поздравляю, ${replyUsername}! Участник ${fromUsername} повысил твою репутацию, так держать! Твоя репутация ${reputationData.reputation}`,
+			{
+				reply_markup: {
+					inline_keyboard: [
+						[
+							{
+								text: 'Статистика чата',
+								url: 'https://skill-bot-client.vercel.app',
+							},
+						],
+					],
+				},
+			}
+		)
+	}
+
+	async getReputation(telegramId: string): Promise<Reputations> {
+		return await this.db.reputations.findFirst({
+			where: { telegramId },
+		})
+	}
+
+	async updateReputation(reputation: number, id: number): Promise<void> {
+		await this.db.reputations.update({
+			where: { id },
+			data: { reputation },
+		})
+	}
+
+	async addNewReputation(data: Prisma.ReputationsCreateInput): Promise<void> {
+		await this.db.reputations.create({ data })
+	}
+
+	async increaseReputation(
+		telegramId: string,
+		username: string,
+		fullName: string,
+		userAvatar: string
+	) {
+		const reputationData = await this.getReputation(telegramId)
+
+		if (reputationData) {
+			await this.updateReputation(
+				reputationData.reputation + 1,
+				reputationData.id
+			)
+			return
+		}
+
+		await this.addNewReputation({
+			telegramId,
+			username,
+			userAvatar,
+			fullName,
+			reputation: 1,
+		})
+	}
+
 	async handleThanksWordReaction(ctx: TelegramBot.Message, bot: TelegramBot) {
-		// const telegramId = String(ctx?.reply_to_message?.from.id)
-		// const userAvatar = await this.getUserAvatarUrl(
-		// 	ctx.reply_to_message.from.id,
-		// 	bot
-		// )
-		// console.log(0, telegramId)
-		// console.log(1, ctx)
-		console.log(1, ctx?.reply_to_message?.from.id)
-		// await this.increaseReputation(
-		// 	telegramId,
-		// 	ctx.reply_to_message.from?.username
-		// 		? ctx.reply_to_message.from.username
-		// 		: '',
-		// 	`${ctx.reply_to_message.from?.first_name} ${ctx.reply_to_message.from?.last_name}`,
-		// 	userAvatar
-		// )
-		// await this.sendReputationMessage(
-		// 	ctx.chat.id,
-		// 	`${ctx.reply_to_message.from.first_name} ${
-		// 		ctx.reply_to_message.from?.username
-		// 			? `(@${ctx.reply_to_message.from?.username})`
-		// 			: ''
-		// 	}`,
-		// 	ctx.from.first_name,
-		// 	bot,
-		// 	telegramId
-		// )
+		const telegramId = String(ctx?.reply_to_message?.from.id)
+		const userAvatar = await this.getUserAvatarUrl(
+			ctx.reply_to_message.from.id,
+			bot
+		)
+		// console.log(1, userAvatar)
+
+		await this.increaseReputation(
+			telegramId,
+			ctx.reply_to_message.from?.username
+				? ctx.reply_to_message.from.username
+				: '',
+			`${ctx.reply_to_message.from?.first_name} ${ctx.reply_to_message.from?.last_name}`,
+			userAvatar
+		)
+
+		await this.sendReputationMessage(
+			ctx.chat.id,
+			`${ctx.reply_to_message.from.first_name} ${
+				ctx.reply_to_message.from?.username
+					? `(@${ctx.reply_to_message.from?.username})`
+					: ''
+			}`,
+			ctx.from.first_name,
+			bot,
+			telegramId
+		)
 	}
 
 	async getUserAvatarUrl(userId: number, bot: TelegramBot) {
