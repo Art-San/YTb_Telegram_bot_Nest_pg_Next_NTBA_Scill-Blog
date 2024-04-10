@@ -87,6 +87,10 @@ export class BotService implements OnModuleInit {
 		}
 	}
 
+	async getAllReputations(): Promise<Reputations[]> {
+		return await this.db.reputations.findMany()
+	}
+
 	async sendReputationMessage(
 		chatId: number,
 		replyUsername: string,
